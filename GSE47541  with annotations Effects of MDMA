@@ -1,0 +1,212 @@
+#Reading in one of the datasets that is completely lacking gene symbol or gene ID annotation:
+#This one is for Annaka's meta-analysis: GSE81024
+
+#Before starting, I looked at the Gemma's page for GSE81024:
+https://gemma.msl.ubc.ca/expressionExperiment/showExpressionExperiment.html?id=13018
+#and found the ID for the platform - in this case the platform was an Agilent microarray chip, and the ID for that platform is GPL7202
+
+#If I type "GPL7202" into Google, the first thing that pops up is GEO's Accession viewer:
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL7202
+#This page contains the annotation for the probes provided by the Agilent company
+#If I scroll down to the bottom of this page there is a data table with the gene annotation for each probe.
+#Under that table is the option "Download full table" - I download it to the same folder where I am storing the differential expression results for GSE81024.
+
+#Alright, the first part of the code is the same as what we did for the other datasets:
+
+#I set the working directory to where I have the files for GSE81024:
+setwd("~/Desktop/GSE47541_Effects of MDMA and Venlafaxine")
+
+#I determine which files are there:
+list.files()
+# [1] "analysis.results.txt"              "new r code.R"                     
+# [3] "Platform Annotations_GSE47541.rtf" "resultset_ID481338.data.txt"      
+# [5] "TempResultsJoined.csv"
+
+#And then I plug the file names for the resultsets into the ReadingInGemmaDE function:
+ReadingInGemmaDE(ResultSetFileNames=c("resultset_ID481338.data.txt"))
+
+str(TempResultsJoined)
+# 'data.frame':	22512 obs. of  7 variables:
+#   $ Element_Name          : int  430152 6180253 6020433 5720021 4540438 2030603 2450136 5700037 1690239 3360484 ...
+# $ Gene_Symbol           : logi  NA NA NA NA NA NA ...
+# $ Gene_Name             : logi  NA NA NA NA NA NA ...
+# $ NCBI_ID               : logi  NA NA NA NA NA NA ...
+# $ FoldChange_venlafaxine: num  0.1296 0.09482 -0.00447 -0.04122 -0.06826 ...
+# $ Tstat_venlafaxine     : num  1.639 0.7595 -0.0799 -0.4811 -0.5115 ...
+# $ PValue_venlafaxine    : num  0.13 0.464 0.938 0.64 0.619 ...
+
+
+#This is where things differ: 
+
+#Now I read in the additional annotation for the Agilent microarray chip that we got off the GEO website:
+MoreAnnotation<-read.delim("Platform_GSE47541.txt", sep="\t", header=TRUE, stringsAsFactors = FALSE, comment.char = "#")
+
+str(MoreAnnotation)
+# 'data.frame':	18977 obs. of  14 variables:
+#   $ ID        : int  10411 10575 20224 20356 50010 50014 50017 50020 50021 50022 ...
+# $ Search_key: chr  "GI_27501443-S" "GI_27671779-S" "GI_62652792-S" "GI_62657046-S" ...
+# $ Target    : chr  "ILMN_58987" "ILMN_161739" "ILMN_64190" "ILMN_62424" ...
+# $ ProbeId   : int  10411 10575 20224 20356 50010 50014 50017 50020 50021 50022 ...
+# $ Gid       : int  27501443 27671779 62652792 62657046 56090278 62658001 62663583 62656287 34850062 62666700 ...
+# $ Transcript: chr  "NM_017000.2" "GI_27671779" "XM_576312.1" "XM_220977.3" ...
+# $ GB_ACC    : chr  "NM_017000.2" "XM_224905.1" "XM_576312.1" "XM_220977.3" ...
+# $ Symbol    : chr  "Nqo1" "LOC306504" "Ep300" "LOC303537" ...
+# $ Type      : chr  "S" "S" "S" "S" ...
+# $ Start     : int  1336 1990 6736 977 0 216 1973 291 316 416 ...
+# $ SEQUENCE  : chr  "TGCAGTGACTGACAAGCCTCGGGGGATTGCTCTCCAGCTCTTCTCTGCCT" "GACAACTTCATTGGACACAAGGGAGGAGAGAGTAGGAGGAAGGAGGGGGG" "CAGATGGGGTCTCCTGCTCAGCCCAACCCTATGAGCCCACAGCAGCATAT" "CTGAGCCAGCAGAAGTGGCTGCAGGAAATGGAGTGAATGGGGAAGGCAGG" ...
+# $ Definition: chr  "Rattus norvegicus NAD(P)H dehydrogenase, quinone 1 (Nqo1), mRNA." "" "PREDICTED: Rattus norvegicus E1A binding protein p300 (Ep300), mRNA." "PREDICTED: Rattus norvegicus similar to hypothetical protein A930006D11 (LOC303537), mRNA." ...
+# $ Ontology  : chr  "nitric oxide biosynthesis [goid 6809] [evidence IEA]; synaptic transmission, cholinergic [goid 7271] [evidence "| __truncated__ "" "" "" ...
+# $ Synonym   : chr  "Dia4; MGC93075" "" "" "" ..
+colnames(MoreAnnotation)
+#[1] "ID"         "Search_key" "Target"     "ProbeId"    "Gid"        "Transcript" "GB_ACC"    
+#[8] "Symbol"     "Type"       "Start"      "SEQUENCE"   "Definition" "Ontology"   "Synonym" 
+
+#I pull out just the columns for the probe ID, gene symbol, and gene name (and Entrez or NCBI ID, if available) and stash them in a new, smaller data frame:
+NeededAnnotation<-MoreAnnotation[,c(1,8,12)]
+
+
+str(NeededAnnotation)
+# 'data.frame':	18977 obs. of  3 variables:
+#   $ ID        : int  10411 10575 20224 20356 50010 50014 50017 50020 50021 50022 ...
+# $ Symbol    : chr  "Nqo1" "LOC306504" "Ep300" "LOC303537" ...
+# $ Definition: chr  "Rattus norvegicus NAD(P)H dehydrogenase, quinone 1 (Nqo1), mRNA." "" "PREDICTED: Rattus norvegicus E1A binding protein p300 (Ep300), mRNA." "PREDICTED: Rattus norvegicus similar to hypothetical protein A930006D11 (LOC303537), mRNA." ...
+# #In order to join our differential expression results with the additional annotation, I need to tell R that they each have a column that contains the probe IDs. To do this, that column needs to be named the same thing within both our differential expression results (TempResultsJoined) and in the additional annotation (NeededAnnotation)
+# #Within TempResultsJoined that column is called "Element_Name"
+
+colnames(TempResultsJoined)
+ 
+
+#So I re-name the columns in NeededAnnotation so that probe ID is named "Element_Name". I also re-name the Gene Symbol and Gene Name columns because I want the new additional annotation to be obvious after we join the data-frames.
+colnames(NeededAnnotation)<-c("Element_Name", "Gene_Symbol_New","Gene_Name_New")
+
+#I load the library that contains the join function:
+library(plyr)
+
+#And join the two data frames so that the resulting data frame contains the same rows & order as our differential expression results (TempResultsJoined) using the "type=left" parameter:
+TempResultsJoined_wAnnotation<-join(TempResultsJoined, NeededAnnotation, by="Element_Name", type="left")
+
+str(TempResultsJoined_wAnnotation)
+# 'data.frame':	22512 obs. of  9 variables:
+#   $ Element_Name          : int  430152 6180253 6020433 5720021 4540438 2030603 2450136 5700037 1690239 3360484 ...
+# $ Gene_Symbol           : logi  NA NA NA NA NA NA ...
+# $ Gene_Name             : logi  NA NA NA NA NA NA ...
+# $ NCBI_ID               : logi  NA NA NA NA NA NA ...
+# $ FoldChange_venlafaxine: num  0.1296 0.09482 -0.00447 -0.04122 -0.06826 ...
+# $ Tstat_venlafaxine     : num  1.639 0.7595 -0.0799 -0.4811 -0.5115 ...
+# $ PValue_venlafaxine    : num  0.13 0.464 0.938 0.64 0.619 ...
+# $ Gene_Symbol_New       : chr  "LOC498869" "Snapc4_predicted" "Aqp3" "LOC501255" ...
+# $ Gene_Name_New         : chr  "PREDICTED: Rattus norvegicus similar to Methionine aminopeptidase 2 (MetAP 2) (Peptidase M 2) (Initiation facto"| __truncated__ "PREDICTED: Rattus norvegicus small nuclear RNA activating complex, polypeptide 4 (predicted) (Snapc4_predicted), mRNA." "Rattus norvegicus aquaporin 3 (Aqp3), mRNA." "PREDICTED: Rattus norvegicus similar to RIKEN cDNA 4930555G01 (LOC501255), mRNA." ...
+# #Then, to make the lay out for our differential expression results data frame similar to what we used for our other datasets, I put the new gene symbol annotation into the old gene symbol annotation column, and then do the same for the new gene name annotation:
+ 
+TempResultsJoined_wAnnotation$Gene_Symbol<-TempResultsJoined_wAnnotation$Gene_Symbol_New
+ TempResultsJoined_wAnnotation$Gene_Name<-TempResultsJoined_wAnnotation$Gene_Name_New
+
+str(TempResultsJoined_wAnnotation)
+# 'data.frame':	22512 obs. of  9 variables:
+#   $ Element_Name          : int  430152 6180253 6020433 5720021 4540438 2030603 2450136 5700037 1690239 3360484 ...
+# $ Gene_Symbol           : chr  "LOC498869" "Snapc4_predicted" "Aqp3" "LOC501255" ...
+# $ Gene_Name             : chr  "PREDICTED: Rattus norvegicus similar to Methionine aminopeptidase 2 (MetAP 2) (Peptidase M 2) (Initiation facto"| __truncated__ "PREDICTED: Rattus norvegicus small nuclear RNA activating complex, polypeptide 4 (predicted) (Snapc4_predicted), mRNA." "Rattus norvegicus aquaporin 3 (Aqp3), mRNA." "PREDICTED: Rattus norvegicus similar to RIKEN cDNA 4930555G01 (LOC501255), mRNA." ...
+# $ NCBI_ID               : logi  NA NA NA NA NA NA ...
+# $ FoldChange_venlafaxine: num  0.1296 0.09482 -0.00447 -0.04122 -0.06826 ...
+# $ Tstat_venlafaxine     : num  1.639 0.7595 -0.0799 -0.4811 -0.5115 ...
+# $ PValue_venlafaxine    : num  0.13 0.464 0.938 0.64 0.619 ...
+# $ Gene_Symbol_New       : chr  "LOC498869" "Snapc4_predicted" "Aqp3" "LOC501255" ...
+# $ Gene_Name_New         : chr  "PREDICTED: Rattus norvegicus similar to Methionine aminopeptidase 2 (MetAP 2) (Peptidase M 2) (Initiation facto"| __truncated__ "PREDICTED: Rattus norvegicus small nuclear RNA activating complex, polypeptide 4 (predicted) (Snapc4_predicted), mRNA." "Rattus norvegicus aquaporin 3 (Aqp3), mRNA." "PREDICTED: Rattus norvegicus similar to RIKEN cDNA 4930555G01 (LOC501255), mRNA." ...
+
+TempResultsJoined<-TempResultsJoined_wAnnotation
+
+#And then the rest of the coding should be the same as normal:
+
+FilteringDEResults_GoodAnnotation<-function(TempResultsJoined){
+  
+  print("# of rows with missing NCBI annotation:")
+  print(sum(TempResultsJoined$NCBI_ID==""|TempResultsJoined$NCBI_ID=="null"))
+  
+  print("# of rows with missing Gene Symbol annotation:")
+  print(sum(TempResultsJoined$Gene_Symbol==""|TempResultsJoined$Gene_Symbol=="null"))
+  
+  print("# of rows mapped to multiple NCBI_IDs:")
+  print(length(grep('\\|', TempResultsJoined$NCBI_ID)))
+  
+  print("# of rows mapped to multiple Gene Symbols:")
+  print(length(grep('\\|', TempResultsJoined$Gene_Symbol)))
+  
+  #I only want the subset of data which contains rows that do not contain a Gene Symbol of ""
+  TempResultsJoined_NoNA<-TempResultsJoined[(TempResultsJoined$Gene_Symbol==""|TempResultsJoined$Gene_Symbol=="null")==FALSE,]
+  
+  if(length(grep('\\|', TempResultsJoined_NoNA$Gene_Symbol))==0){
+    TempResultsJoined_NoNA_NoMultimapped<<-TempResultsJoined_NoNA
+  }else{
+    #I only want rows annotated with a single Gene Symbol (no pipe):
+    TempResultsJoined_NoNA_NoMultimapped<<-TempResultsJoined_NoNA[-(grep('\\|', TempResultsJoined_NoNA$Gene_Symbol)),]
+  }
+  
+  print("# of rows with good annotation")
+  print(nrow(TempResultsJoined_NoNA_NoMultimapped))
+  
+  #For record keeping (sometimes useful for troubleshooting later)
+  write.csv(TempResultsJoined_NoNA_NoMultimapped, "TempResultsJoined_NoNA_NoMultimapped.csv")
+  
+  rm(TempResultsJoined_NoNA, TempResultsJoined_NoNA_NoMultimapped)
+  
+  print("Outputted object: TempResultsJoined_NoNA_NoMultimapped")
+}
+FilteringDEResults_GoodAnnotation(TempResultsJoined)
+
+# [1] "# of rows with missing NCBI annotation:"
+# [1] NA
+# [1] "# of rows with missing Gene Symbol annotation:"
+# [1] 6360
+# [1] "# of rows mapped to multiple NCBI_IDs:"
+# [1] 0
+# [1] "# of rows mapped to multiple Gene Symbols:"
+# [1] 0
+# [1] "# of rows with good annotation"
+# [1] 34893
+# [1] "Outputted object: TempResultsJoined_NoNA_NoMultimapped"
+# Warning message:
+#   In rm(TempResultsJoined_NoNA, TempResultsJoined_NoNA_NoMultimapped) :
+#   object 'TempResultsJoined_NoNA_NoMultimapped' not found
+
+str(TempResultsJoined_NoNA_NoMultimapped)
+# 'data.frame':	22345 obs. of  9 variables:
+#   $ Element_Name          : int  430152 6180253 6020433 5720021 4540438 2030603 2450136 5700037 1690239 3360484 ...
+# $ Gene_Symbol           : chr  "LOC498869" "Snapc4_predicted" "Aqp3" "LOC501255" ...
+# $ Gene_Name             : chr  "PREDICTED: Rattus norvegicus similar to Methionine aminopeptidase 2 (MetAP 2) (Peptidase M 2) (Initiation facto"| __truncated__ "PREDICTED: Rattus norvegicus small nuclear RNA activating complex, polypeptide 4 (predicted) (Snapc4_predicted), mRNA." "Rattus norvegicus aquaporin 3 (Aqp3), mRNA." "PREDICTED: Rattus norvegicus similar to RIKEN cDNA 4930555G01 (LOC501255), mRNA." ...
+# $ NCBI_ID               : logi  NA NA NA NA NA NA ...
+# $ FoldChange_venlafaxine: num  0.1296 0.09482 -0.00447 -0.04122 -0.06826 ...
+# $ Tstat_venlafaxine     : num  1.639 0.7595 -0.0799 -0.4811 -0.5115 ...
+# $ PValue_venlafaxine    : num  0.13 0.464 0.938 0.64 0.619 ...
+# $ Gene_Symbol_New       : chr  "LOC498869" "Snapc4_predicted" "Aqp3" "LOC501255" ...
+# $ Gene_Name_New         : chr  "PREDICTED: Rattus norvegicus similar to Methionine aminopeptidase 2 (MetAP 2) (Peptidase M 2) (Initiation facto"| __truncated__ "PREDICTED: Rattus norvegicus small nuclear RNA activating complex, polypeptide 4 (predicted) (Snapc4_predicted), mRNA." "Rattus norvegicus aquaporin 3 (Aqp3), mRNA." "PREDICTED: Rattus norvegicus similar to RIKEN cDNA 4930555G01 (LOC501255), mRNA." ...
+
+CollapsingDEResults_OneResultPerGene(GSE_ID="GSE47541", TempResultsJoined_NoNA_NoMultimapped, ComparisonsOfInterest = c("GSE47541_Venlafaxine_vs_control"), NamesOfFoldChangeColumns=list(TempResultsJoined_NoNA_NoMultimapped$FoldChange_venlafaxine), NamesOfTstatColumns = list(TempResultsJoined_NoNA_NoMultimapped$Tstat_venlafaxine))
+
+# [1] "Double check that the vectors containing the two fold change and tstat column names contain the same order as the group comparisons of interest - otherwise this function won't work properly!  If the order matches, proceed:"
+# [1] "# of rows with unique NCBI IDs:"
+# [1] 1
+# [1] "# of rows with unique Gene Symbols:"
+# [1] 18521
+# [1] "Dimensions of Fold Change matrix, averaged by gene symbol:"
+# [1] 18520     1
+# [1] "Output: Named DEResults_GSE47541"
+
+str(DEResults_GSE47541)
+# List of 4
+# $ Log2FC: num [1:18520, 1] 0.0222 0.1745 0.1441 0.1615 0.1315 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:18520] "0610031j06rik" "1200013a08rik" "1200013b22rik" "15-Sep" ...
+# .. ..$ : chr "GSE47541_Venlafaxine_vs_control"
+# $ Tstat : num [1:18520, 1] 0.247 0.866 1.34 2.041 1.119 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:18520] "0610031j06rik" "1200013a08rik" "1200013b22rik" "15-Sep" ...
+# .. ..$ : chr "GSE47541_Venlafaxine_vs_control"
+# $ SE    : num [1:18520, 1] 0.0898 0.2016 0.1075 0.0791 0.1175 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:18520] "0610031j06rik" "1200013a08rik" "1200013b22rik" "15-Sep" ...
+# .. ..$ : chr "GSE47541_Venlafaxine_vs_control"
+# $ SV    : num [1:18520, 1] 0.00806 0.04064 0.01156 0.00626 0.01381 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:18520] "0610031j06rik" "1200013a08rik" "1200013b22rik" "15-Sep" ...
+# .. ..$ : chr "GSE47541_Venlafaxine_vs_control"
+
