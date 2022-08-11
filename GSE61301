@@ -1,0 +1,263 @@
+#1) Read in the differential expression results from Gemma for each dataset:
+
+#To start out with, I downloaded the Gemma differential expression output for the studies of interest.
+#I put each study is in its own folder.
+
+#I set working directory to where I downloaded the Gemma differential expression output for this particular study:
+setwd("~/Desktop/GSE61301_Gene expression of 7 day comb")
+list.files()
+# [1] "analysis.results.txt"                      
+# [2] "GSE61301 NEW CODE.R"                       
+# [3] "GSE61301_Gene expression of 7 day comb.txt"
+# [4] "Icon\r"                                    
+# [5] "resultset_ID481328.data.txt"               
+# [6] "Screen Shot 2022-07-31 at 8.33.54 PM.png" 
+
+#This procedure for reading in the differential expression results was pretty easily generalizable, so I functionalized it:
+
+
+ReadingInGemmaDE<-function(ResultSetFileNames){
+  
+  #Reading in the analysis results file:
+  TempAnalysisResults<-read.delim("analysis.results.txt", sep="\t", stringsAsFactors = FALSE, comment.char = "#")
+  
+  #I placed these results in a list format:
+  TempResultsToJoin<-list(TempAnalysisResults)
+  
+  for(i in c(1:length(ResultSetFileNames))){
+    #The result set files are the detailed differential expression results for a particular variable:
+    TempResultsToJoin[[i]]<-read.delim(ResultSetFileNames[i], sep="\t", stringsAsFactors = FALSE, comment.char = "#")
+  }
+  
+  TempResultsJoined<<-join_all(TempResultsToJoin, by="Element_Name")
+  #Note: I've heard from other students that the join() and join_all() functions in the plyr package can cause problems in newer versions of R - you may need to replace this with merge and merge_all
+  
+  #Saving the joined results:
+  write.csv(TempResultsJoined, "TempResultsJoined.csv")
+  
+  rm(TempAnalysisResults, TempResultsToJoin)
+  
+  print("Outputted object: TempResultsJoined")
+}
+
+
+#Notes about parameters for function: ReadingInGemmaDE()
+#ResultSetFileNames should be a character vector containing the names of the result files
+
+#Example Usage of the function:
+
+ReadingInGemmaDE(ResultSetFileNames=c("resultset_ID481328.data.txt"))
+#[1] "Outputted object: TempResultsJoined"
+
+str(TempResultsJoined)
+# 'data.frame':	30365 obs. of  7 variables:
+#   $ Element_Name                   : chr  "A_44_P137497" "A_44_P512970" "A_43_P10757" "A_64_P066172" ...
+# $ Gene_Symbol                    : chr  "" "" "Pabir2" "" ...
+# $ Gene_Name                      : chr  "" "" "PABIR family member 2" "" ...
+# $ NCBI_ID                        : chr  "" "" "501647" "" ...
+# $ FoldChange_yohimbine_imipramine: num  1.096 0.0239 -0.8026 -0.1279 -0.1511 ...
+# $ Tstat_yohimbine_imipramine     : num  2.569 1.023 -1.692 -0.531 -1.06 ...
+# $ PValue_yohimbine_imipramine    : num  0.0424 0.3459 0.1416 0.6143 0.3299 ...
+
+#3) Remove rows of data that have missing or unambiguous gene annotation
+
+#Notably, using modern probe annotation, many of these probes now map to more than one gene symbol, and when this happens Gemma separates provides a list of all of the gene symbols that the probe maps to using a pipe. 
+#There are also probes that no longer map to any gene symbol (annotated with ""). 
+
+#This data processing step was pretty generalizable, so I functionalized it:
+
+FilteringDEResults_GoodAnnotation<-function(TempResultsJoined){
+  
+  print("# of rows with missing NCBI annotation:")
+  print(sum(TempResultsJoined$NCBI_ID==""|TempResultsJoined$NCBI_ID=="null"))
+  
+  print("# of rows with missing Gene Symbol annotation:")
+  print(sum(TempResultsJoined$Gene_Symbol==""|TempResultsJoined$Gene_Symbol=="null"))
+  
+  print("# of rows mapped to multiple NCBI_IDs:")
+  print(length(grep('\\|', TempResultsJoined$NCBI_ID)))
+  
+  print("# of rows mapped to multiple Gene Symbols:")
+  print(length(grep('\\|', TempResultsJoined$Gene_Symbol)))
+  
+  #I only want the subset of data which contains rows that do not contain a Gene Symbol of ""
+  TempResultsJoined_NoNA<-TempResultsJoined[(TempResultsJoined$Gene_Symbol==""|TempResultsJoined$Gene_Symbol=="null")==FALSE,]
+  
+  #I only want rows annotated with a single Gene Symbol (no pipe):
+  TempResultsJoined_NoNA_NoMultimapped<<-TempResultsJoined_NoNA[-(grep('\\|', TempResultsJoined_NoNA$Gene_Symbol)),]
+  
+  print("# of rows with good annotation")
+  print(nrow(TempResultsJoined_NoNA_NoMultimapped))
+  
+  #For record keeping (sometimes useful for troubleshooting later)
+  write.csv(TempResultsJoined_NoNA_NoMultimapped, "TempResultsJoined_NoNA_NoMultimapped.csv")
+  
+  rm(TempResultsJoined_NoNA, TempResultsJoined_NoNA_NoMultimapped)
+  
+  print("Outputted object: TempResultsJoined_NoNA_NoMultimapped")
+}
+
+#Example usage of function:
+
+FilteringDEResults_GoodAnnotation(TempResultsJoined)
+# [1] "# of rows with missing NCBI annotation:"
+# [1] 10982
+# [1] "# of rows with missing Gene Symbol annotation:"
+# [1] 10982
+# [1] "# of rows mapped to multiple NCBI_IDs:"
+# [1] 840
+# [1] "# of rows mapped to multiple Gene Symbols:"
+# [1] 840
+# [1] "# of rows with good annotation"
+# [1] 18543
+# [1] "Outputted object: TempResultsJoined_NoNA_NoMultimapped"
+
+str(TempResultsJoined_NoNA_NoMultimapped)
+# 'data.frame':	18543 obs. of  7 variables:
+#   $ Element_Name                   : chr  "A_43_P10757" "A_43_P22311" "A_64_P091737" "A_64_P128022" ...
+# $ Gene_Symbol                    : chr  "Pabir2" "Snx19" "Plaat5" "RGD1565367" ...
+# $ Gene_Name                      : chr  "PABIR family member 2" "sorting nexin 19" "phospholipase A and acyltransferase 5" "similar to Solute carrier family 23, member 2 (Sodium-dependent vitamin C transporter 2)" ...
+# $ NCBI_ID                        : chr  "501647" "315478" "293711" "312226" ...
+# $ FoldChange_yohimbine_imipramine: num  -0.8026 -0.1511 0.2035 -0.00444 -0.4557 ...
+# $ Tstat_yohimbine_imipramine     : num  -1.692 -1.06 1.436 -0.0168 -1.325 ...
+# $ PValue_yohimbine_imipramine    : num  0.142 0.33 0.201 0.987 0.234 ...
+####################
+
+#2) Identifying the results for the variables of interest for the meta-analysis:
+
+#At this point, we should double-check:
+
+#A) Whether Gemma has used a reference (baseline) group that makes sense for our analysis 
+
+#B) Which group comparisons are actually of interest to us.
+
+CollapsingDEResults_OneResultPerGene<-function(GSE_ID, TempResultsJoined_NoNA_NoMultimapped, ComparisonsOfInterest, NamesOfFoldChangeColumns, NamesOfTstatColumns){
+  
+  print("Double check that the vectors containing the two fold change and tstat column names contain the same order as the group comparisons of interest - otherwise this function won't work properly!  If the order matches, proceed:")
+  
+  print("# of rows with unique NCBI IDs:")
+  print(length(unique(TempResultsJoined_NoNA_NoMultimapped$NCBI_ID)))
+  
+  print("# of rows with unique Gene Symbols:")
+  print(length(unique(TempResultsJoined_NoNA_NoMultimapped$Gene_Symbol)))
+  
+  #We will need both the Log2FC and T-stats averaged:
+  
+  TempResultsJoined_NoNA_NoMultimapped_FoldChange_Average<-list()
+  
+  for(i in c(1:length(NamesOfFoldChangeColumns))){
+    
+    TempResultsJoined_NoNA_NoMultimapped_FoldChange_Average[[i]]<-tapply(NamesOfFoldChangeColumns[i][[1]], TempResultsJoined_NoNA_NoMultimapped$Gene_Symbol, mean)
+    
+  }
+  
+  TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol<-do.call(cbind, TempResultsJoined_NoNA_NoMultimapped_FoldChange_Average)
+  
+  print("Dimensions of Fold Change matrix, averaged by gene symbol:")
+  print(dim(TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol))
+  
+  colnames(TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol)<-ComparisonsOfInterest
+  
+  write.csv(TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol, "TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol.csv")
+  
+  
+  TempResultsJoined_NoNA_NoMultimapped_Tstat_Average<-list()
+  
+  for(i in c(1:length(NamesOfFoldChangeColumns))){
+    
+    TempResultsJoined_NoNA_NoMultimapped_Tstat_Average[[i]]<-tapply(NamesOfTstatColumns[i][[1]], TempResultsJoined_NoNA_NoMultimapped$Gene_Symbol, mean)
+    
+  }
+  
+  TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol<-do.call(cbind, TempResultsJoined_NoNA_NoMultimapped_Tstat_Average)
+  
+  colnames(TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol)<-ComparisonsOfInterest
+  
+  write.csv(TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol, "TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol.csv")
+  
+  
+  
+  TempResultsJoined_NoNA_NoMultimapped_SE<-list()
+  
+  for(i in c(1:length(NamesOfFoldChangeColumns))){
+    TempResultsJoined_NoNA_NoMultimapped_SE[[i]]<-NamesOfFoldChangeColumns[i][[1]]/NamesOfTstatColumns[i][[1]]
+  }
+  
+  
+  TempResultsJoined_NoNA_NoMultimapped_SE_Average<-list()
+  
+  for(i in c(1:length(NamesOfFoldChangeColumns))){
+    
+    TempResultsJoined_NoNA_NoMultimapped_SE_Average[[i]]<-tapply(TempResultsJoined_NoNA_NoMultimapped_SE[[i]], TempResultsJoined_NoNA_NoMultimapped$Gene_Symbol, mean)
+    
+  }
+  
+  TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol<-do.call(cbind, TempResultsJoined_NoNA_NoMultimapped_SE_Average)
+  
+  colnames(TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol)<-ComparisonsOfInterest
+  
+  write.csv(TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol, "TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol.csv")
+  
+  #For running our meta-analysis, we are actually going to need the sampling variance instead of the standard error
+  #The sampling variance is just the standard error squared.
+  
+  TempResultsJoined_NoNA_NoMultimapped_SV<-(TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol)^2
+  
+  write.csv(TempResultsJoined_NoNA_NoMultimapped_SV, "TempResultsJoined_NoNA_NoMultimapped_SV.csv")
+  
+  TempMasterResults<-list(Log2FC=TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol, Tstat=TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol, SE=TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol, SV=TempResultsJoined_NoNA_NoMultimapped_SV)
+  
+  assign(paste("DEResults", GSE_ID, sep="_"), TempMasterResults, envir = as.environment(1))
+  
+  print(paste("Output: Named DEResults", GSE_ID, sep="_"))
+  
+  rm(TempMasterResults, TempResultsJoined_NoNA_NoMultimapped_SV, TempResultsJoined_NoNA_NoMultimapped_SE, TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol, TempResultsJoined_NoNA_NoMultimapped_FoldChange_Average, TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol, TempResultsJoined_NoNA_NoMultimapped_Tstat_Average)
+  
+}
+#Notes about parameters for function CollapsingDEResults_OneResultPerGene()
+#GSE_ID is a string indicating the name of the Gemma dataset
+#TempResultsJoined_NoNA_NoMultimapped is the data frame outputted by our previous function
+#ComparisonsOfInterest is a character vector containing a list of group comparisons of interest within this dataset. Important: These group comparisons should be listed in exactly the same order as the order that you provide the column names for their associated Fold Change and Tstat output.
+#NamesOfFoldChangeColumns is a list containing the columns of TempResultsJoined_NoNA_NoMultimapped containing the FoldChange results for your comparisons of interes, in the same order as the ComparisonsOfInterest vector
+#NamesOfTstatColumns is a list containing the columns of TempResultsJoined_NoNA_NoMultimapped containing the Tstat results for your comparisons of interes, in the same order as the ComparisonsOfInterest vector
+
+#Example function usage:
+
+CollapsingDEResults_OneResultPerGene(GSE_ID="GSE61301", TempResultsJoined_NoNA_NoMultimapped, ComparisonsOfInterest=c("GSE61301 Impiramine vs. Control"), NamesOfFoldChangeColumns=list(TempResultsJoined_NoNA_NoMultimapped$FoldChange_yohimbine_imipramine), NamesOfTstatColumns=list(TempResultsJoined_NoNA_NoMultimapped$Tstat_yohimbine_imipramine))
+# # [1] "Double check that the vectors containing the two fold change and tstat column names contain the same order as the group comparisons of interest - otherwise this function won't work properly!  If the order matches, proceed:"
+# [1] "# of rows with unique NCBI IDs:"
+# [1] 15503
+# [1] "# of rows with unique Gene Symbols:"
+# [1] 15503
+# [1] "Dimensions of Fold Change matrix, averaged by gene symbol:"
+# [1] 15503     1
+# [1] "Output: Named DEResults_GSE61301"
+
+str(DEResults_GSE61301)
+# list of 4
+# $ Log2FC: num [1:15503, 1] 0.0726 0.2531 0.2424 0.4038 -0.6501 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:15503] "A1bg" "A1cf" "A2m" "A3galt2" ...
+# .. ..$ : chr "GSE61301 Impiramine vs. Control"
+# $ Tstat : num [1:15503, 1] 1.49 1.79 1.28 2.11 -1.34 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:15503] "A1bg" "A1cf" "A2m" "A3galt2" ...
+# .. ..$ : chr "GSE61301 Impiramine vs. Control"
+# $ SE    : num [1:15503, 1] 0.0486 0.1415 0.1929 0.1912 0.4866 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:15503] "A1bg" "A1cf" "A2m" "A3galt2" ...
+# .. ..$ : chr "GSE61301 Impiramine vs. Control"
+# $ SV    : num [1:15503, 1] 0.00237 0.02002 0.0372 0.03655 0.23678 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:15503] "A1bg" "A1cf" "A2m" "A3galt2" ...
+# .. ..$ : chr "GSE61301 Impiramine vs. Control"
+
+
+head(DEResults_GSE61301[[1]])
+# GSE61301 Impiramine vs. Control
+# A1bg                             0.07257
+# A1cf                             0.25310
+# A2m                              0.24245
+# A3galt2                          0.40380
+# A4galt                          -0.65010
+# AA926063                        -0.40240
