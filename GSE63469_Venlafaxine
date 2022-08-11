@@ -1,0 +1,259 @@
+library(plyr)
+library(metafor)
+
+#1) Read in the differential expression results from Gemma for each dataset:
+
+#To start out with, I downloaded the Gemma differential expression output for the studies of interest.
+#I put each study is in its own folder.
+
+setwd("~/Desktop/GSE63469_Venlafaxine")
+list.files()
+
+#This procedure for reading in the differential expression results was pretty easily generalizable, so I functionalized it:
+
+
+ReadingInGemmaDE<-function(ResultSetFileNames){
+  
+  #Reading in the analysis results file:
+  TempAnalysisResults<-read.delim("analysis.results.txt", sep="\t", stringsAsFactors = FALSE, comment.char = "#")
+  
+  #I placed these results in a list format:
+  TempResultsToJoin<-list(TempAnalysisResults)
+  
+  for(i in c(1:length(ResultSetFileNames))){
+    #The result set files are the detailed differential expression results for a particular variable:
+    TempResultsToJoin[[i]]<-read.delim(ResultSetFileNames[i], sep="\t", stringsAsFactors = FALSE, comment.char = "#")
+  }
+  
+  TempResultsJoined<<-join_all(TempResultsToJoin, by="Element_Name")
+  #Note: I've heard from other students that the join() and join_all() functions in the plyr package can cause problems in newer versions of R - you may need to replace this with merge and merge_all
+  
+  #Saving the joined results:
+  write.csv(TempResultsJoined, "TempResultsJoined.csv")
+  
+  rm(TempAnalysisResults, TempResultsToJoin)
+  
+  print("Outputted object: TempResultsJoined")
+}
+
+
+#Notes about parameters for function: ReadingInGemmaDE()
+#ResultSetFileNames should be a character vector containing the names of the result files
+
+#Example Usage of the function:
+
+ReadingInGemmaDE(ResultSetFileNames=c("resultset_ID486399.data.txt"))
+#[1] "Outputted object: TempResultsJoined"
+
+str(TempResultsJoined)
+# 'data.frame':	45099 obs. of  10 variables:
+#   $ Element_Name                      : chr  "1423664_at" "1432011_at" "1435942_at" "1425319_s_at" ...
+# $ Gene_Symbol                       : chr  "Qdpr" "2900052L18Rik" "Kcnq2" "Snrnp48" ...
+# $ Gene_Name                         : chr  "quinoid dihydropteridine reductase" "RIKEN cDNA 2900052L18 gene" "potassium voltage-gated channel, subfamily Q, member 2" "small nuclear ribonucleoprotein 48 (U11/U12)" ...
+# $ NCBI_ID                           : chr  "110391" "102640779" "16536" "67797" ...
+# $ FoldChange_30.kg.d.kg_venlafaxine : num  0.1653 0.3902 0.0683 -0.1546 -0.0357 ...
+# $ Tstat_30.kg.d.kg_venlafaxine      : num  4.646 4.853 0.556 -5.754 -0.29 ...
+# $ PValue_30.kg.d.kg_venlafaxine     : num  0.0188 0.0167 0.6171 0.0104 0.7909 ...
+# $ FoldChange_100.kg.d.kg_venlafaxine: num  0.1502 0.3946 0.0998 -0.1314 0.1059 ...
+# $ Tstat_100.kg.d.kg_venlafaxine     : num  4.221 4.907 0.812 -4.892 0.858 ...
+# $ PValue_100.kg.d.kg_venlafaxine    : num  0.0243 0.0162 0.4762 0.0163 0.454 ...
+FilteringDEResults_GoodAnnotation<-function(TempResultsJoined){
+  
+  print("# of rows with missing NCBI annotation:")
+  print(sum(TempResultsJoined$NCBI_ID==""|TempResultsJoined$NCBI_ID=="null"))
+  
+  print("# of rows with missing Gene Symbol annotation:")
+  print(sum(TempResultsJoined$Gene_Symbol==""|TempResultsJoined$Gene_Symbol=="null"))
+  
+  print("# of rows mapped to multiple NCBI_IDs:")
+  print(length(grep('\\|', TempResultsJoined$NCBI_ID)))
+  
+  print("# of rows mapped to multiple Gene Symbols:")
+  print(length(grep('\\|', TempResultsJoined$Gene_Symbol)))
+  
+  #I only want the subset of data which contains rows that do not contain a Gene Symbol of ""
+  TempResultsJoined_NoNA<-TempResultsJoined[(TempResultsJoined$Gene_Symbol==""|TempResultsJoined$Gene_Symbol=="null")==FALSE,]
+  
+  #I only want rows annotated with a single Gene Symbol (no pipe):
+  TempResultsJoined_NoNA_NoMultimapped<<-TempResultsJoined_NoNA[-(grep('\\|', TempResultsJoined_NoNA$Gene_Symbol)),]
+  
+  print("# of rows with good annotation")
+  print(nrow(TempResultsJoined_NoNA_NoMultimapped))
+  
+  #For record keeping (sometimes useful for troubleshooting later)
+  write.csv(TempResultsJoined_NoNA_NoMultimapped, "TempResultsJoined_NoNA_NoMultimapped.csv")
+  
+  rm(TempResultsJoined_NoNA, TempResultsJoined_NoNA_NoMultimapped)
+  
+  print("Outputted object: TempResultsJoined_NoNA_NoMultimapped")
+}
+
+#Example usage of function:
+
+FilteringDEResults_GoodAnnotation(TempResultsJoined)
+# [1] "# of rows with missing NCBI annotation:"
+# [1] 13515
+# [1] "# of rows with missing Gene Symbol annotation:"
+# [1] 13515
+# [1] "# of rows mapped to multiple NCBI_IDs:"
+# [1] 709
+# [1] "# of rows mapped to multiple Gene Symbols:"
+# [1] 709
+# [1] "# of rows with good annotation"
+# [1] 30875
+# [1] "Outputted object: TempResultsJoined_NoNA_NoMultimapped"
+
+str(TempResultsJoined_NoNA_NoMultimapped)
+# 'data.frame':	30875 obs. of  10 variables:
+#   $ Element_Name                      : chr  "1423664_at" "1432011_at" "1435942_at" "1425319_s_at" ...
+# $ Gene_Symbol                       : chr  "Qdpr" "2900052L18Rik" "Kcnq2" "Snrnp48" ...
+# $ Gene_Name                         : chr  "quinoid dihydropteridine reductase" "RIKEN cDNA 2900052L18 gene" "potassium voltage-gated channel, subfamily Q, member 2" "small nuclear ribonucleoprotein 48 (U11/U12)" ...
+# $ NCBI_ID                           : chr  "110391" "102640779" "16536" "67797" ...
+# $ FoldChange_30.kg.d.kg_venlafaxine : num  0.1653 0.3902 0.0683 -0.1546 -0.0357 ...
+# $ Tstat_30.kg.d.kg_venlafaxine      : num  4.646 4.853 0.556 -5.754 -0.29 ...
+# $ PValue_30.kg.d.kg_venlafaxine     : num  0.0188 0.0167 0.6171 0.0104 0.7909 ...
+# $ FoldChange_100.kg.d.kg_venlafaxine: num  0.1502 0.3946 0.0998 -0.1314 0.1059 ...
+# $ Tstat_100.kg.d.kg_venlafaxine     : num  4.221 4.907 0.812 -4.892 0.858 ...
+# $ PValue_100.kg.d.kg_venlafaxine    : num  0.0243 0.0162 0.4762 0.0163 0.454 ...
+
+#2) Identifying the results for the variables of interest for the meta-analysis:
+
+#At this point, we should double-check:
+
+#A) Whether Gemma has used a reference (baseline) group that makes sense for our analysis 
+
+#B) Which group comparisons are actually of interest to us.
+
+
+
+CollapsingDEResults_OneResultPerGene<-function(GSE_ID, TempResultsJoined_NoNA_NoMultimapped, ComparisonsOfInterest, NamesOfFoldChangeColumns, NamesOfTstatColumns){
+  
+  print("Double check that the vectors containing the two fold change and tstat column names contain the same order as the group comparisons of interest - otherwise this function won't work properly!  If the order matches, proceed:")
+  
+  print("# of rows with unique NCBI IDs:")
+  print(length(unique(TempResultsJoined_NoNA_NoMultimapped$NCBI_ID)))
+  
+  print("# of rows with unique Gene Symbols:")
+  print(length(unique(TempResultsJoined_NoNA_NoMultimapped$Gene_Symbol)))
+  
+  #We will need both the Log2FC and T-stats averaged:
+  
+  TempResultsJoined_NoNA_NoMultimapped_FoldChange_Average<-list()
+  
+  for(i in c(1:length(NamesOfFoldChangeColumns))){
+    
+    TempResultsJoined_NoNA_NoMultimapped_FoldChange_Average[[i]]<-tapply(NamesOfFoldChangeColumns[i][[1]], TempResultsJoined_NoNA_NoMultimapped$Gene_Symbol, mean)
+    
+  }
+  
+  TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol<-do.call(cbind, TempResultsJoined_NoNA_NoMultimapped_FoldChange_Average)
+  
+  print("Dimensions of Fold Change matrix, averaged by gene symbol:")
+  print(dim(TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol))
+  
+  colnames(TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol)<-ComparisonsOfInterest
+  
+  write.csv(TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol, "TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol.csv")
+  
+  
+  TempResultsJoined_NoNA_NoMultimapped_Tstat_Average<-list()
+  
+  for(i in c(1:length(NamesOfFoldChangeColumns))){
+    
+    TempResultsJoined_NoNA_NoMultimapped_Tstat_Average[[i]]<-tapply(NamesOfTstatColumns[i][[1]], TempResultsJoined_NoNA_NoMultimapped$Gene_Symbol, mean)
+    
+  }
+  
+  TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol<-do.call(cbind, TempResultsJoined_NoNA_NoMultimapped_Tstat_Average)
+  
+  colnames(TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol)<-ComparisonsOfInterest
+  
+  write.csv(TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol, "TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol.csv")
+  
+  
+  
+  TempResultsJoined_NoNA_NoMultimapped_SE<-list()
+  
+  for(i in c(1:length(NamesOfFoldChangeColumns))){
+    TempResultsJoined_NoNA_NoMultimapped_SE[[i]]<-NamesOfFoldChangeColumns[i][[1]]/NamesOfTstatColumns[i][[1]]
+  }
+  
+  
+  TempResultsJoined_NoNA_NoMultimapped_SE_Average<-list()
+  
+  for(i in c(1:length(NamesOfFoldChangeColumns))){
+    
+    TempResultsJoined_NoNA_NoMultimapped_SE_Average[[i]]<-tapply(TempResultsJoined_NoNA_NoMultimapped_SE[[i]], TempResultsJoined_NoNA_NoMultimapped$Gene_Symbol, mean)
+    
+  }
+  
+  TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol<-do.call(cbind, TempResultsJoined_NoNA_NoMultimapped_SE_Average)
+  
+  colnames(TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol)<-ComparisonsOfInterest
+  
+  write.csv(TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol, "TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol.csv")
+  
+  #For running our meta-analysis, we are actually going to need the sampling variance instead of the standard error
+  #The sampling variance is just the standard error squared.
+  
+  TempResultsJoined_NoNA_NoMultimapped_SV<-(TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol)^2
+  
+  write.csv(TempResultsJoined_NoNA_NoMultimapped_SV, "TempResultsJoined_NoNA_NoMultimapped_SV.csv")
+  
+  TempMasterResults<-list(Log2FC=TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol, Tstat=TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol, SE=TempResultsJoined_NoNA_NoMultimapped_SE_AveragedByGeneSymbol, SV=TempResultsJoined_NoNA_NoMultimapped_SV)
+  
+  assign(paste("DEResults", GSE_ID, sep="_"), TempMasterResults, envir = as.environment(1))
+  
+  print(paste("Output: Named DEResults", GSE_ID, sep="_"))
+  
+  rm(TempMasterResults, TempResultsJoined_NoNA_NoMultimapped_SV, TempResultsJoined_NoNA_NoMultimapped_SE, TempResultsJoined_NoNA_NoMultimapped_FoldChange_AveragedByGeneSymbol, TempResultsJoined_NoNA_NoMultimapped_FoldChange_Average, TempResultsJoined_NoNA_NoMultimapped_Tstat_AveragedByGeneSymbol, TempResultsJoined_NoNA_NoMultimapped_Tstat_Average)
+  
+}
+
+
+#Notes about parameters for function CollapsingDEResults_OneResultPerGene()
+#GSE_ID is a string indicating the name of the Gemma dataset
+#TempResultsJoined_NoNA_NoMultimapped is the data frame outputted by our previous function
+#ComparisonsOfInterest is a character vector containing a list of group comparisons of interest within this dataset. Important: These group comparisons should be listed in exactly the same order as the order that you provide the column names for their associated Fold Change and Tstat output.
+#NamesOfFoldChangeColumns is a list containing the columns of TempResultsJoined_NoNA_NoMultimapped containing the FoldChange results for your comparisons of interes, in the same order as the ComparisonsOfInterest vector
+#NamesOfTstatColumns is a list containing the columns of TempResultsJoined_NoNA_NoMultimapped containing the Tstat results for your comparisons of interes, in the same order as the ComparisonsOfInterest vector
+
+#Example function usage:
+
+CollapsingDEResults_OneResultPerGene(GSE_ID="GSE63469", TempResultsJoined_NoNA_NoMultimapped, ComparisonsOfInterest=c("GSE84183_30.kg_Venlafaxine_vs_Control", "GSE84183_100.kg_Venlafaxine_vs_Control"), NamesOfFoldChangeColumns=list(TempResultsJoined_NoNA_NoMultimapped$FoldChange_30.kg.d.kg_venlafaxine, TempResultsJoined_NoNA_NoMultimapped$FoldChange_100.kg.d.kg_venlafaxine), NamesOfTstatColumns=list(TempResultsJoined_NoNA_NoMultimapped$Tstat_30.kg.d.kg_venlafaxine, TempResultsJoined_NoNA_NoMultimapped$Tstat_100.kg.d.kg_venlafaxine))
+# [1] "Double check that the vectors containing the two fold change and tstat column names contain the same order as the group comparisons of interest - otherwise this function won't work properly!  If the order matches, proceed:"
+# [1] "# of rows with unique NCBI IDs:"
+# [1] 18550
+# [1] "# of rows with unique Gene Symbols:"
+# [1] 18550
+# [1] "Dimensions of Fold Change matrix, averaged by gene symbol:"
+# [1] 18550     2
+# [1] "Output: Named DEResults_GSE63469"
+
+str(DEResults_GSE63469)
+# List of 4
+# $ Log2FC: num [1:18550, 1:2] 0.2384 0.0695 0.0605 0.0921 0.0248 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:18550] "0610005C13Rik" "0610009B22Rik" "0610009L18Rik" "0610010K14Rik" ...
+# .. ..$ : chr [1:2] "GSE84183_30.kg_Venlafaxine_vs_Control" "GSE84183_100.kg_Venlafaxine_vs_Control"
+# $ Tstat : num [1:18550, 1:2] 11.47 5.9 6.266 1.885 0.359 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:18550] "0610005C13Rik" "0610009B22Rik" "0610009L18Rik" "0610010K14Rik" ...
+# .. ..$ : chr [1:2] "GSE84183_30.kg_Venlafaxine_vs_Control" "GSE84183_100.kg_Venlafaxine_vs_Control"
+# $ SE    : num [1:18550, 1:2] 0.02078 0.01178 0.00965 0.05973 0.0472 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:18550] "0610005C13Rik" "0610009B22Rik" "0610009L18Rik" "0610010K14Rik" ...
+# .. ..$ : chr [1:2] "GSE84183_30.kg_Venlafaxine_vs_Control" "GSE84183_100.kg_Venlafaxine_vs_Control"
+# $ SV    : num [1:18550, 1:2] 4.32e-04 1.39e-04 9.32e-05 3.57e-03 2.23e-03 ...
+# ..- attr(*, "dimnames")=List of 2
+# .. ..$ : chr [1:18550] "0610005C13Rik" "0610009B22Rik" "0610009L18Rik" "0610010K14Rik" ...
+# .. ..$ : chr [1:2] "GSE84183_30.kg_Venlafaxine_vs_Control" "GSE84183_100.kg_Venlafaxine_vs_Control"
+
+head(DEResults_GSE63469[[1]])
+# GSE84183_30.kg_Venlafaxine_vs_Control GSE84183_100.kg_Venlafaxine_vs_Control
+# 0610005C13Rik                            0.23840000                             0.05024000
+# 0610009B22Rik                            0.06951000                             0.04083000
+# 0610009L18Rik                            0.06049000                             0.14780000
+# 0610010K14Rik                            0.09213500                             0.13169500
+# 0610012G03Rik                            0.02483333                             0.04069933
+# 0610025J13Rik                           -0.05957000                             0.14280000
